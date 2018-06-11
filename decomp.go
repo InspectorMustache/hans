@@ -1,4 +1,4 @@
-package main
+package hans
 
 import (
 	"crypto/sha256"
@@ -120,6 +120,16 @@ func (ccs *charInfo) populate(line string) {
 	}
 }
 
+// stringToCharLine converts a slice of strings to a slice of charLines
+func stringToCharLine(s []string) []charLine {
+	cl := make([]charLine, len(s))
+	for _, v := range s {
+		cl = append(cl, charLine(v))
+	}
+
+	return cl
+}
+
 func getShaFromReader(r io.Reader) ([32]byte, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -142,7 +152,7 @@ func extractTableLines(r io.Reader) ([]charLine, error) {
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "pre" {
 			s := strings.Split(cleanNode(n), "\n")
-			lines = append(lines, s...)
+			lines = append(lines, stringToCharLine(s)...)
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			f(c)
@@ -162,7 +172,7 @@ func cleanNode(n *html.Node) string {
 	return s
 }
 
-func getCharDict() (charDict, error) {
+func GetCharDict() (charDict, error) {
 	resp, err := http.Get("https://commons.wikimedia.org/wiki/Commons:Chinese_characters_decomposition")
 	if err != nil {
 		return charDict{}, err
@@ -176,5 +186,6 @@ func getCharDict() (charDict, error) {
 
 	cd := charDict{sha: sha}
 
+	// TODO: populate chardict
 	return cd, nil
 }
