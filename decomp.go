@@ -43,7 +43,7 @@ type charDict struct {
 
 type charLine string
 
-// string returns string representation of charLine
+// string returns string representation of charLine.
 func (cl *charLine) string() string {
 	return string(*cl)
 }
@@ -68,6 +68,8 @@ func (cl *charLine) rxPop(rx *regexp.Regexp) (string, error) {
 	return r, nil
 }
 
+// populate individually parses a slice of charLines, creating entries in
+// charDicts dictionary for each element
 func (cd *charDict) populate(lines []charLine) {
 	for _, l := range lines {
 		k, e := l.rxPop(keyRx)
@@ -87,6 +89,7 @@ func (cd *charDict) populate(lines []charLine) {
 
 }
 
+// populate parses the string line and populates the fields of its parent ccs.
 func (ccs *charInfo) populate(line string) {
 	// line is assumed to already be stripped of the keychar
 	// set all the other fields
@@ -120,7 +123,7 @@ func (ccs *charInfo) populate(line string) {
 	}
 }
 
-// stringToCharLine converts a slice of strings to a slice of charLines
+// stringToCharLine converts a slice of strings to a slice of charLines.
 func stringToCharLine(s []string) []charLine {
 	cl := make([]charLine, len(s))
 	for _, v := range s {
@@ -130,6 +133,8 @@ func stringToCharLine(s []string) []charLine {
 	return cl
 }
 
+// getShaFromReader finishes reading from r and then returns the sha256sum of
+// the yielded content.
 func getShaFromReader(r io.Reader) ([32]byte, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -140,6 +145,8 @@ func getShaFromReader(r io.Reader) ([32]byte, error) {
 	return sha, nil
 }
 
+// extractTableLines reads the content of r and parses them as html which is
+// then split into a slice of charLines and returned.
 func extractTableLines(r io.Reader) ([]charLine, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
@@ -162,6 +169,7 @@ func extractTableLines(r io.Reader) ([]charLine, error) {
 	return lines, nil
 }
 
+// cleanNode returns the html node n as a processable string.
 func cleanNode(n *html.Node) string {
 	var b strings.Builder
 	w := io.Writer(&b)
@@ -172,6 +180,8 @@ func cleanNode(n *html.Node) string {
 	return s
 }
 
+// GetCharDict downloads the webpage of the Wikimedia decomposition project and
+// turns it into a charDict.
 func GetCharDict() (charDict, error) {
 	resp, err := http.Get("https://commons.wikimedia.org/wiki/Commons:Chinese_characters_decomposition")
 	if err != nil {
