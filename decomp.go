@@ -59,9 +59,8 @@ func (cl *charLine) validate() error {
 	}
 }
 
+// rxPop returns the match for the regexp rx and trims it off
 func (cl *charLine) rxPop(rx *regexp.Regexp) (string, error) {
-	// return match for Regexp in charLine and trim off the match at the same
-	// time
 	r := rx.FindString(cl.string())
 	s := rx.ReplaceAllString(cl.string(), "")
 	*cl = charLine(s)
@@ -71,6 +70,8 @@ func (cl *charLine) rxPop(rx *regexp.Regexp) (string, error) {
 // populate individually parses a slice of charLines, creating entries in
 // charDicts dictionary for each element
 func (cd *charDict) populate(lines []charLine) {
+	cd.dict = make(map[string]charInfo, len(lines))
+
 	for _, l := range lines {
 		k, e := l.rxPop(keyRx)
 		if e != nil {
@@ -123,14 +124,50 @@ func (ccs *charInfo) populate(line string) {
 	}
 }
 
-// stringToCharLine converts a slice of strings to a slice of charLines.
-func stringToCharLine(s []string) []charLine {
-	cl := make([]charLine, len(s))
-	for _, v := range s {
-		cl = append(cl, charLine(v))
+// putInStringSlice attempts to put a string into slice at position pos. if that
+// position is out of bounds, the slice capacity is extended
+func putInStringSlice(slice *[]string, pos int, item *string) {
+	if cap(*slice) > pos {
+		(*slice)[pos] = *item
+	} else {
+		nSlice := make([]string, getNewSliceSize(cap(*slice), pos))
+		copy(nSlice, *slice)
+		*slice = nSlice
+		(*slice)[pos] = *item
+	}
+}
+
+// putInCharLineSlice attempts to put a charLine into slice at position pos. if
+// that position is out of bounds, the slice capacity is extended
+func putInCharLineSlice(slice *[]charLine, pos int, item *charLine) {
+	if cap(*slice) > pos {
+		(*slice)[pos] = *item
+	} else {
+		nSlice := make([]charLine, getNewSliceSize(cap(*slice), pos))
+		copy(nSlice, *slice)
+		*slice = nSlice
+		(*slice)[pos] = *item
+	}
+}
+
+// getNewSliceSize keeps increasing oldSize by a fifth until it at least reaches minSize 
+func getNewSliceSize(oldSize int, minSize int) int {
+	for oldSize < minSize + 1 {
+		plus := (oldSize / 5) + 1 // increase by at least 1
+		oldSize = oldSize + plus
+	}
+	return oldSize
+}
+
+// stringsToCharLines converts a slice of strings to a slice of charLines.
+func stringsToCharLines(stringS []string) []charLine {
+	clSlice := make([]charLine, len(stringS))
+	for k, v := range stringS {
+		cl := charLine(v)
+		putInCharLineSlice(&clSlice, k, &cl)
 	}
 
-	return cl
+	return clSlice
 }
 
 // getShaFromReader finishes reading from r and then returns the sha256sum of
@@ -159,7 +196,7 @@ func extractTableLines(r io.Reader) ([]charLine, error) {
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "pre" {
 			s := strings.Split(cleanNode(n), "\n")
-			lines = append(lines, stringToCharLine(s)...)
+			lines = append(lines, stringsToCharLines(s)...)
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			f(c)
@@ -183,7 +220,8 @@ func cleanNode(n *html.Node) string {
 // GetCharDict downloads the webpage of the Wikimedia decomposition project and
 // turns it into a charDict.
 func GetCharDict() (charDict, error) {
-	resp, err := http.Get("https://commons.wikimedia.org/wiki/Commons:Chinese_characters_decomposition")
+	resp, err := http.Get(
+		"https://commons.wikimedia.org/wiki/Commons:Chinese_characters_decomposition")
 	if err != nil {
 		return charDict{}, err
 	}
@@ -196,6 +234,11 @@ func GetCharDict() (charDict, error) {
 
 	cd := charDict{sha: sha}
 
-	// TODO: populate chardict
+	l, err := extractTableLines(resp.Body)
+	if err != nil {
+		return charDict{}, err
+	}
+	cd.populate(l)
 	return cd, nil
+	
 }

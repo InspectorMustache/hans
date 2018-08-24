@@ -41,25 +41,84 @@ func TestRxPop(t *testing.T) {
 	}
 }
 
-func TestStringToCharLine(t *testing.T) {
-	s := []string{"one", "two", "three", "four"}
-	cl := []charLine{"one", "two", "three", "four"}
+// TestPutInSlice 
+func TestPutInSlice(t *testing.T) {
+	s := make([]string, 2)
 
-	if len(s) != len(cl) {
-		t.Errorf("Error casting %s to %s", s, cl)
+	testTable := []struct {
+		pos int
+		item string
+	} {
+		{3, "test1"},
+		{12, "test2"},
+		{16, "test3"},
+		{255, "test4"},
+		{23401, "test5"},
 	}
 
-	for n, v := range s {
-		if cl[n] != charLine(v) {
-			t.Errorf("Error casting %s to %s", s, cl)
+	for _, testItem := range testTable {
+		putInStringSlice(&s, testItem.pos, &testItem.item)
+		if s[testItem.pos] != testItem.item {
+			t.Errorf(`Tried putting %s at position %d into slice of original
+			length but exited with this slice: %s`,
+				testItem.item, testItem.pos, s)
 		}
 	}
 }
 
-func TestGetCharDict(t *testing.T) {
-	cd, err := GetCharDict()
-	// TODO: check some keys here for their correct values
-	if err != nil {
-		t.Error("Error getting character dictionary")
+func TestStringToCharLine(t *testing.T) {
+	s := []string{"one", "two", "three", "four"}
+	cl := []charLine{"one", "two", "three", "four"}
+
+	for n, v := range s {
+		if cl[n] != charLine(v) {
+			t.Errorf("Error casting string %s to charLines", v)
+		}
 	}
 }
+
+func TestStringsToCharLines(t *testing.T) {
+	sSlice := []string{"one", "two", "three", "four"}
+	clSlice := stringsToCharLines(sSlice)
+
+	identical := true
+
+	for n, v := range clSlice {
+		if v != charLine(sSlice[n]) {
+			identical = false
+			break
+		}
+	}
+
+	if (len(sSlice) !=  len(clSlice)) || ! identical {
+		t.Errorf("Function stringsToCharLines took %s and returned %s",
+		sSlice, clSlice)
+	}
+}
+
+// func TestGetCharDict(t *testing.T) {
+// 	cd, err := GetCharDict()
+// 	// TODO: check some keys here for their correct values
+// 	if err != nil {
+// 		t.Error("Error getting character dictionary")
+// 	}
+
+// 	strokesTable := []struct {
+// 		in string
+// 		out int64
+// 	} {
+// 		{"我", 7},
+// 		{"赢", 20},
+// 		{"籠", 22},
+// 		{"三", 3},
+// 		{"忽", 8},
+// 	}
+
+// 	for _, testItem := range strokesTable {
+// 		if cd.dict[testItem.in].keyStrokes != testItem.out {
+// 			t.Errorf(`Error checking CharDict entries. keyStroke value of %s
+// 			should be %d but is %d`, testItem.in, testItem.out, cd.dict[testItem.in].keyStrokes)
+// 			t.Error(cd.dict[testItem.in])
+// 		}
+// 	}
+// }
