@@ -10,14 +10,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"bytes"
 )
 
-
-var lineRx, _ = regexp.Compile(`^\s+(.)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\S+)$`)
-var keyRx, _ = regexp.Compile(`^\s+(.)`)
-var infoRx, _ = regexp.Compile(`\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\S+)$`)
-var preOpenRx, _ = regexp.Compile(`^<pre>\s*\n(\s{8}.)`)
-var preCloseRx, _ = regexp.Compile(`\n\s*</pre>$`)
+var lineRx = regexp.MustCompile(`^\s+(.)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\S+)$`)
+var keyRx = regexp.MustCompile(`^\s+(.)`)
+var infoRx = regexp.MustCompile(`\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\d+)\s+(\*| |\?)\s+(\S+)\s+(\S+)$`)
+var preOpenRx = regexp.MustCompile(`^<pre>\s*\n(\s+.)`)
+var preCloseRx = regexp.MustCompile(`\n\s*</pre>$`)
 
 type charInfo struct {
 	// move this to map key
@@ -124,79 +124,34 @@ func (ccs *charInfo) populate(line string) {
 	}
 }
 
-// putInStringSlice attempts to put a string into slice at position pos. if that
-// position is out of bounds, the slice capacity is extended
-func putInStringSlice(slice *[]string, pos int, item *string) {
-	if cap(*slice) > pos {
-		(*slice)[pos] = *item
-	} else {
-		nSlice := make([]string, getNewSliceSize(cap(*slice), pos))
-		copy(nSlice, *slice)
-		*slice = nSlice
-		(*slice)[pos] = *item
-	}
-}
-
-// putInCharLineSlice attempts to put a charLine into slice at position pos. if
-// that position is out of bounds, the slice capacity is extended
-func putInCharLineSlice(slice *[]charLine, pos int, item *charLine) {
-	if cap(*slice) > pos {
-		(*slice)[pos] = *item
-	} else {
-		nSlice := make([]charLine, getNewSliceSize(cap(*slice), pos))
-		copy(nSlice, *slice)
-		*slice = nSlice
-		(*slice)[pos] = *item
-	}
-}
-
-// getNewSliceSize keeps increasing oldSize by a fifth until it at least reaches minSize 
-func getNewSliceSize(oldSize int, minSize int) int {
-	for oldSize < minSize + 1 {
-		plus := (oldSize / 5) + 1 // increase by at least 1
-		oldSize = oldSize + plus
-	}
-	return oldSize
-}
-
 // stringsToCharLines converts a slice of strings to a slice of charLines.
 func stringsToCharLines(stringS []string) []charLine {
-	clSlice := make([]charLine, len(stringS))
-	for k, v := range stringS {
+	clSlice := make([]charLine, 0, len(stringS))
+	for _, v := range stringS {
 		cl := charLine(v)
-		putInCharLineSlice(&clSlice, k, &cl)
+		clSlice = append(clSlice, cl)
 	}
 
 	return clSlice
 }
 
-// getShaFromReader finishes reading from r and then returns the sha256sum of
-// the yielded content.
-func getShaFromReader(r io.Reader) ([32]byte, error) {
-	raw, err := ioutil.ReadAll(r)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	sha := sha256.Sum256(raw)
-
-	return sha, nil
-}
-
-// extractTableLines reads the content of r and parses them as html which is
+// extractTableLines reads the content of b and parses it as html which is
 // then split into a slice of charLines and returned.
-func extractTableLines(r io.Reader) ([]charLine, error) {
-	doc, err := html.Parse(r)
+func extractTableLines(b []byte) ([]charLine, error) {
+	doc, err := html.Parse(bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
 
-	lines := make([]charLine, 21800)
+	lines := make([]charLine, 0, 21800)
 
 	var f func(*html.Node)
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "pre" {
 			s := strings.Split(cleanNode(n), "\n")
-			lines = append(lines, stringsToCharLines(s)...)
+			if len(s) > 0 {
+				lines = append(lines, stringsToCharLines(s)...)
+			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			f(c)
@@ -212,6 +167,10 @@ func cleanNode(n *html.Node) string {
 	w := io.Writer(&b)
 	html.Render(w, n)
 	s := b.String()
+	// if preOpenRx doesn't match we are at the opening paragraph
+	if !preOpenRx.MatchString(s) {
+		return ""
+	}
 	s = preOpenRx.ReplaceAllString(s, "$1")
 	s = preCloseRx.ReplaceAllString(s, "")
 	return s
@@ -222,23 +181,24 @@ func cleanNode(n *html.Node) string {
 func GetCharDict() (charDict, error) {
 	resp, err := http.Get(
 		"https://commons.wikimedia.org/wiki/Commons:Chinese_characters_decomposition")
+
 	if err != nil {
 		return charDict{}, err
 	}
 	defer resp.Body.Close()
 
-	sha, err := getShaFromReader(resp.Body)
+	raw, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return charDict{}, err
 	}
 
-	cd := charDict{sha: sha}
-
-	l, err := extractTableLines(resp.Body)
+	l, err := extractTableLines(raw)
 	if err != nil {
 		return charDict{}, err
 	}
+
+	cd := charDict{sha: sha256.Sum256(raw)}
 	cd.populate(l)
+
 	return cd, nil
-	
 }
